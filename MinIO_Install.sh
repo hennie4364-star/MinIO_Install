@@ -1,60 +1,56 @@
 #!/bin/bash
 
-# Exit immediately if any command exits with a non-zero status
 set -e
 
-echo "=== MinIO Setup Script ==="
+error_exit() {
+  echo "Error occurred at: $1"
+  exit 1
+}
 
-# Prompt for Ubuntu machine username (needed for certs directory path)
-current_user=$(whoami)
-read -p "Enter your Ubuntu machine username [default: $current_user]: " MACHINE_USER
-MACHINE_USER=${MACHINE_USER:-$current_user}
-
-# Prompt for MinIO Root User and Password
-read -p "Enter MinIO Root Username [default: minio-user]: " MINIO_ROOT_USER
-MINIO_ROOT_USER=${MINIO_ROOT_USER:-minio-user}
-
-read -sp "Enter MinIO Root Password [default: minio123]: " MINIO_ROOT_PASSWORD
-echo "" # Move to a new line after hidden password input
-MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minio123}
-
-# 1. Download and Install MinIO
 echo "Downloading MinIO..."
-wget https://dl.min.io/server/minio/release/linux-amd64/minio.RELEASE.2025-09-07T16-13-09Z -O minio
+wget https://dl.min.io/server/minio/release/linux-amd64/minio.RELEASE.2025-09-07T16-13-09Z -O minio || error_exit "Downloading MinIO"
 
-echo "Moving MinIO binary to /usr/local/bin/..."
-sudo mv minio /usr/local/bin/
+echo "Moving MinIO binary to /usr/local/bin/ ..."
+sudo mv minio /usr/local/bin/ || error_exit "Moving MinIO binary"
 
-echo "Making MinIO binary executable..."
-sudo chmod +x /usr/local/bin/minio
+echo "Setting executable permission on MinIO binary..."
+sudo chmod +x /usr/local/bin/minio || error_exit "Setting executable permission"
 
-# 2. Create MinIO User, Group, and Directories
 echo "Creating minio-user group..."
-sudo groupadd -r minio-user || true # Ignores error if group already exists
+sudo groupadd -r minio-user || error_exit "Creating minio-user group"
 
-echo "Creating minio-user system user..."
-sudo useradd -M -r -g minio-user minio-user || true # Ignores error if user already exists
+echo "Creating minio-user user..."
+sudo useradd -M -r -g minio-user minio-user || error_exit "Creating minio-user user"
 
-echo "Creating data directory..."
-sudo mkdir -p /mnt/data
+echo "Creating data directory /mnt/data..."
+sudo mkdir -p /mnt/data || error_exit "Creating data directory"
 
-echo "Setting directory ownership and permissions..."
-sudo chown minio-user:minio-user /mnt/data
-sudo chmod 777 /mnt
-sudo chmod 777 /mnt/data
+echo "Setting ownership and permissions on /mnt and /mnt/data..."
+sudo chown minio-user:minio-user /mnt/data || error_exit "Setting ownership on /mnt/data"
+sudo chmod 777 /mnt || error_exit "Setting permissions on /mnt"
+sudo chmod 777 /mnt/data || error_exit "Setting permissions on /mnt/data"
 
-# 3. Create MinIO Environment File
-echo "Writing environment file to /etc/default/minio..."
-sudo bash -c "cat << 'EOF' > /etc/default/minio
-MINIO_VOLUMES=\"/mnt/data\"
-MINIO_OPTS=\"--certs-dir /home/$MACHINE_USER/.minio/certs --console-address :9001\"
-MINIO_ROOT_USER=$MINIO_ROOT_USER
-MINIO_ROOT_PASSWORD=$MINIO_ROOT_PASSWORD
-EOF"
+# Prompt for MINIO_ROOT_USER
+read -rp "Enter MINIO_ROOT_USER (default: minio-user): " input_root_user
+MINIO_ROOT_USER=${input_root_user:-minio-user}
 
-# 4. Create Systemd Service File
-echo "Writing systemd service file to /etc/systemd/system/minio.service..."
-sudo bash -c "cat << 'EOF' > /etc/systemd/system/minio.service
+# Prompt for MINIO_ROOT_PASSWORD
+read -rp "Enter MINIO_ROOT_PASSWORD (default: minio123): " input_root_password
+MINIO_ROOT_PASSWORD=${input_root_password:-minio123}
+
+MACHINE_USERNAME=$(whoami)
+
+echo "Creating MinIO environment file /etc/default/minio..."
+sudo bash -c "cat > /etc/default/minio" <<EOF || error_exit "Creating environment file"
+/mnt/data
+MINIO_VOLUMES="/mnt/data"
+MINIO_OPTS="--certs-dir /home/${MACHINE_USERNAME}/.minio/certs --console-address :9001"
+MINIO_ROOT_USER=${MINIO_ROOT_USER}
+MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+EOF
+
+echo "Creating systemd service file /etc/systemd/system/minio.service..."
+sudo bash -c "cat > /etc/systemd/system/minio.service" <<EOF || error_exit "Creating systemd service file"
 [Unit]
 Description=MinIO
 Documentation=https://docs.min.io
@@ -62,8 +58,8 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
-User=$MINIO_ROOT_USER
-Group=$MINIO_ROOT_USER
+User=minio-user
+Group=minio-user
 EnvironmentFile=/etc/default/minio
 ExecStart=/usr/local/bin/minio server \$MINIO_OPTS \$MINIO_VOLUMES
 Restart=always
@@ -72,14 +68,13 @@ TimeoutStopSec=5
 
 [Install]
 WantedBy=multi-user.target
-EOF"
+EOF
 
-# 5. Reload, Start and Verify Service
 echo "Reloading systemd daemon..."
-sudo systemctl daemon-reload
+sudo systemctl daemon-reload || error_exit "Reloading systemd daemon"
 
 echo "Starting MinIO service..."
-sudo systemctl start minio.service
+sudo systemctl start minio.service || error_exit "Starting MinIO service"
 
 echo "Checking MinIO service status..."
-sudo systemctl status minio.service
+sudo systemctl status minio.service || error_exit "Checking MinIO service status"
