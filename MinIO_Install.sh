@@ -58,8 +58,8 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
-User=minio-user
-Group=minio-user
+User=${MINIO_ROOT_USER}
+Group=${MINIO_ROOT_USER}
 EnvironmentFile=/etc/default/minio
 ExecStart=/usr/local/bin/minio server \$MINIO_OPTS \$MINIO_VOLUMES
 Restart=always
