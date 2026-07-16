@@ -71,7 +71,7 @@ fi
 
 echo "Setting ownership and permissions..."
 sudo chown "$USER_NAME:$GROUP_NAME" /mnt/data || error_exit "Setting ownership"
-sudo chmod 755 /mnt/data || error_exit "Setting permissions"
+sudo chmod 777 /mnt/data || error_exit "Setting permissions"
 
 # -------------------------
 # ENV FILE
